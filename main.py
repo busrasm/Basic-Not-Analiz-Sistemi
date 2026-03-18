@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import pandas as pd
+import matplotlib.pyplot as plt
 
 def create_database():
     if os.path.exists("analiz.db"):
@@ -38,7 +40,8 @@ def create_tables(cursor):
         midterm float,
         final_exam float,
         average float,
-        situation varchar(255)
+        situation varchar(255),
+        work_hour float
     )
     ''')
 
@@ -77,21 +80,21 @@ def insert_data(cursor):
     cursor.executemany("INSERT INTO Lessons VALUES (?,?,?,?)", lessons)
 
     nots = [
-        (1, 1, 70, 80, 76.0, 'Geçti'),
-        (2, 2, 45, 55, 51.0, 'Kaldı'),
-        (3, 8, 80, 85, 83.0, 'Geçti'),
-        (4, 2, 90, 95, 93.0, 'Geçti'),
-        (5, 5, 50, 40, 44.0, 'Kaldı'),
-        (6, 10, 85, 90, 88.0, 'Geçti'),
-        (7, 1, 95, 100, 98.0, 'Geçti'),
-        (8, 9, 30, 45, 39.0, 'Kaldı'),
-        (9, 6, 75, 80, 78.0, 'Geçti'),
-        (10, 7, 55, 60, 58.0, 'Kaldı'),
-        (11, 1, 65, 75, 71.0, 'Geçti'),
-        (12, 3, 40, 30, 34.0, 'Kaldı')
+        (1, 1, 70, 80, 76.0, 'Geçti', 15.00),
+        (2, 2, 45, 55, 51.0, 'Kaldı', 5.00),
+        (3, 8, 80, 85, 83.0, 'Geçti', 20.00),
+        (4, 2, 90, 95, 93.0, 'Geçti', 25.00),
+        (5, 5, 50, 40, 44.0, 'Kaldı', 4.00),
+        (6, 10, 85, 90, 88.0, 'Geçti', 22.00),
+        (7, 1, 95, 100, 98.0, 'Geçti', 28.00),
+        (8, 9, 30, 45, 39.0, 'Kaldı', 2.00),
+        (9, 6, 75, 80, 78.0, 'Geçti', 18.00),
+        (10, 7, 55, 60, 58.0, 'Kaldı', 3.50),
+        (11, 1, 65, 75, 71.0, 'Geçti', 14.00),
+        (12, 3, 40, 30, 34.0, 'Kaldı', 12.00)
     ]
 
-    cursor.executemany("INSERT INTO Nots VALUES (?,?,?,?,?,?)", nots)
+    cursor.executemany("INSERT INTO Nots VALUES (?,?,?,?,?,?,?)", nots)
 
     print("Data inserted successfully")
 
@@ -141,6 +144,49 @@ def aggregate_functions(cursor):
         print("----------Students Average Not----------")
         print(record[0])
 
+def dependency_analysis(cursor):
+    cursor.execute("SELECT average, work_hour FROM Nots")
+    data = cursor.fetchall()
+
+    df = pd.DataFrame(data, column = ["average", "work_hour"])
+
+    print("\n----Temel İstatistikler----")
+    print("Ortalama:\n", df.mean(), "\n")
+    print("Varyans:\n", df.var(), "\n")
+    print("Kovaryans:\n", df.cov(), "\n")
+
+    print("---------------------------------------")
+    print("25%:", df["average"].quantile(0.25))
+    print("50%:", df["average"].quantile(0.50))
+    print("75%:", df["average"].quantile(0.75), "\n")
+
+    print("----Korelasyon Tablosu----")
+    korelasyon_matrisi = df.corr()
+    print(korelasyon_matrisi)
+
+    korelasyon_degeri = korelasyon_matrisi.loc["average", "work_hour"]
+
+    print(f"\nNet Korelasyon Değeri: {korelasyon_degeri:.2f}")
+
+    if korelasyon_degeri >= 0.7:
+        print("Güçlü Pozitif İlişki (BAĞIMLI OLAY)")
+        print("-> Çalışma saati artarsa not kesinlikle artıyor.")
+    elif korelasyon_degeri <= -0.7:
+        print("Güçlü Negatif İlişki (BAĞIMLI OLAY)")
+        print("-> Çalışma saati artarsa not düşüyor (Ters giden bir şeyler var).")
+    elif -0.3 < korelasyon_degeri < 0.3:
+        print("İlişki Yok (BAĞIMSIZ OLAY)")
+        print("-> Not ile çalışma saati arasında bir bağ kurulamadı.")
+    else:
+        print("Orta Düzey İlişki (KISMİ BAĞIMLI OLAY)")
+        print("-> Çalışma saatinin etkisi var ama tek etken değil.")
+
+    plt.hist(df["average"], color='skyblue', edgecolor='black')
+    plt.title("Öğrenci Ortalama Notları Histogramı")
+    plt.xlabel("Notlar")
+    plt.ylabel("Öğrenci Sayısı")
+    plt.show()
+
 def main():
     conn, cursor = create_database()
 
@@ -150,6 +196,7 @@ def main():
         sql_operation(conn, cursor)
         basic_sql_operations(cursor)
         aggregate_functions(cursor)
+        dependency_analysis(cursor)
         conn.commit()
 
     except sqlite3.Error as e:
